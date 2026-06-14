@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Student Performance Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden}
+.root{position:relative;min-height:100vh;background:#0b0f1e;overflow:hidden}
+canvas#bg{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0}
+.overlay{position:relative;z-index:2;padding:2.5rem 1.5rem 4rem;max-width:860px;margin:0 auto}
+
+/* Header */
+.hdr{text-align:center;margin-bottom:2.5rem}
+.hdr-label{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#a78bfa;margin-bottom:.5rem;font-family:'Space Mono',monospace}
+.hdr-h1{font-size:clamp(1.5rem,4vw,2.2rem);font-weight:600;color:#e2e8f0;line-height:1.25}
+.hdr-sub{font-size:13px;color:#64748b;margin-top:.4rem}
+
+/* Metric cards */
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:1.5rem}
+.metric{background:rgba(30,41,59,.75);border:0.5px solid rgba(99,102,241,.25);border-radius:14px;padding:1.1rem 1rem;text-align:center;backdrop-filter:blur(8px)}
+.metric .mlbl{font-size:10px;color:#64748b;margin-bottom:5px;text-transform:uppercase;letter-spacing:.1em;font-family:'Space Mono',monospace}
+.metric .mval{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+.metric .msub{font-size:11px;margin-top:4px}
+.avg .mval{color:#a78bfa}
+.hi .mval{color:#34d399}.hi .msub{color:#34d399}
+.lo .mval{color:#f87171}.lo .msub{color:#f87171}
+
+/* Two column layout */
+.two-col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:14px;margin-bottom:1.5rem;align-items:start}
+
+/* Glass panels */
+.panel{background:rgba(15,25,45,.82);border:0.5px solid rgba(99,102,241,.22);border-radius:14px;padding:1.1rem 1.3rem;backdrop-filter:blur(10px)}
+.ptitle{font-size:10px;font-weight:600;color:#818cf8;letter-spacing:.12em;text-transform:uppercase;margin-bottom:1rem;display:flex;align-items:center;gap:6px;font-family:'Space Mono',monospace}
+.ptitle .dot{width:6px;height:6px;border-radius:50%;background:#6366f1;flex-shrink:0}
+
+/* Form rows */
+.srow{display:grid;grid-template-columns:1fr 78px;gap:8px;align-items:end;margin-bottom:10px}
+.srow:last-of-type{margin-bottom:0}
+.field label{display:block;font-size:10px;color:#475569;margin-bottom:3px;letter-spacing:.05em;text-transform:uppercase}
+.field input{width:100%;padding:7px 10px;font-size:13px;border-radius:8px;border:0.5px solid rgba(99,102,241,.3);background:rgba(10,16,35,.85);color:#e2e8f0;font-family:'DM Sans',sans-serif;transition:border-color .2s,box-shadow .2s;outline:none}
+.field input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.18)}
+.field input::placeholder{color:#1e3a5f}
+
+/* Analyse button */
+.btn{display:block;width:100%;margin-top:1rem;padding:9px;font-size:13px;font-weight:500;border-radius:8px;background:linear-gradient(135deg,rgba(99,102,241,.2),rgba(167,139,250,.15));border:0.5px solid rgba(99,102,241,.5);color:#a5b4fc;cursor:pointer;font-family:'DM Sans',sans-serif;letter-spacing:.03em;transition:background .2s,transform .1s}
+.btn:hover{background:linear-gradient(135deg,rgba(99,102,241,.35),rgba(167,139,250,.25));transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+
+/* Results table */
+.rtable{width:100%;border-collapse:collapse;font-size:13px}
+.rtable th{font-size:10px;color:#475569;text-align:left;padding:4px 8px;border-bottom:0.5px solid rgba(99,102,241,.15);font-weight:400;text-transform:uppercase;letter-spacing:.08em}
+.rtable td{padding:8px 8px;border-bottom:0.5px solid rgba(30,41,59,.7);color:#cbd5e1;vertical-align:middle}
+.rtable tr:last-child td{border-bottom:none}
+.rtable tr:hover td{background:rgba(99,102,241,.06)}
+
+/* Badges */
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:10px;font-weight:600;letter-spacing:.05em}
+.b-top{background:rgba(52,211,153,.13);color:#34d399}
+.b-low{background:rgba(248,113,113,.13);color:#f87171}
+.b-avg{background:rgba(99,102,241,.15);color:#a78bfa}
+
+/* Chart wrapper */
+.chart-wrap{background:rgba(15,25,45,.82);border:0.5px solid rgba(99,102,241,.22);border-radius:14px;padding:1.1rem 1.3rem;backdrop-filter:blur(10px)}
+
+/* Empty hint */
+.empty-hint{font-size:12px;color:#334155;text-align:center;padding:1.5rem 0}
+
+/* Responsive */
+@media(max-width:600px){
+  .two-col{grid-template-columns:1fr}
+  .metrics{grid-template-columns:1fr}
+  .srow{grid-template-columns:1fr 70px}
+}
+</style>
+</head>
+<body>
+<div class="root">
+  <canvas id="bg"></canvas>
+  <div class="overlay">
+
+    <!-- Header -->
+    <div class="hdr">
+      <div class="hdr-label">Academic Analytics</div>
+      <div class="hdr-h1">Student Performance Analysis</div>
+      <div class="hdr-sub">Enter marks for 5 students and instantly visualize results</div>
+    </div>
+
+    <!-- Metric Cards -->
+    <div class="metrics">
+      <div class="metric avg">
+        <div class="mlbl">Class average</div>
+        <div class="mval" id="m-avg">—</div>
+      </div>
+      <div class="metric hi">
+        <div class="mlbl">Highest score</div>
+        <div class="mval" id="m-hi">—</div>
+        <div class="msub" id="m-hi-n"></div>
+      </div>
+      <div class="metric lo">
+        <div class="mlbl">Lowest score</div>
+        <div class="mval" id="m-lo">—</div>
+        <div class="msub" id="m-lo-n"></div>
+      </div>
+    </div>
+
+    <!-- Form + Table -->
+    <div class="two-col">
+      <div class="panel">
+        <div class="ptitle"><span class="dot"></span>Enter student data</div>
+        <div id="inputs"></div>
+        <button class="btn" onclick="analyse()">&#x27F3; Analyse &rarr;</button>
+      </div>
+      <div class="panel">
+        <div class="ptitle"><span class="dot"></span>Individual results</div>
+        <div id="results"><p class="empty-hint">Results will appear here after analysis.</p></div>
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-wrap">
+      <div class="ptitle"><span class="dot"></span>Performance chart</div>
+      <div style="position:relative;width:100%;height:240px">
+        <canvas id="pc" role="img" aria-label="Bar chart showing student marks">Enter data and click Analyse to see the chart.</canvas>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Animated Background -->
+<script>
+(function(){
+  const C=document.getElementById('bg');
+  const cx=C.getContext('2d');
+  let W,H,pts=[];
+
+  function resize(){
+    W=C.width=window.innerWidth;
+    H=C.height=window.innerHeight;
+  }
+
+  function initPts(){
+    pts=[];
+    const n=Math.floor((W*H)/10000);
+    for(let i=0;i<n;i++){
+      pts.push({
+        x:Math.random()*W, y:Math.random()*H,
+        vx:(Math.random()-.5)*.35, vy:(Math.random()-.5)*.35,
+        r:Math.random()*1.8+.4, a:Math.random()
+      });
+    }
+  }
+
+  function draw(){
+    cx.clearRect(0,0,W,H);
+    cx.fillStyle='#0b0f1e';
+    cx.fillRect(0,0,W,H);
+
+    /* Grid */
+    const gs=28;
+    cx.strokeStyle='rgba(99,102,241,.055)';
+    cx.lineWidth=.5;
+    for(let x=0;x<W;x+=gs){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();}
+    for(let y=0;y<H;y+=gs){cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke();}
+
+    /* Glow orbs */
+    const orbs=[
+      {x:W*.1, y:H*.15, r:160, c:'rgba(99,102,241,.09)'},
+      {x:W*.88,y:H*.12, r:130, c:'rgba(167,139,250,.07)'},
+      {x:W*.5, y:H*.9,  r:180, c:'rgba(52,211,153,.06)'},
+      {x:W*.75,y:H*.6,  r:100, c:'rgba(99,102,241,.05)'}
+    ];
+    orbs.forEach(function(o){
+      const g=cx.createRadialGradient(o.x,o.y,0,o.x,o.y,o.r);
+      g.addColorStop(0,o.c);
+      g.addColorStop(1,'transparent');
+      cx.fillStyle=g;
+      cx.beginPath();cx.arc(o.x,o.y,o.r,0,Math.PI*2);cx.fill();
+    });
+
+    /* Particles + connections */
+    for(let i=0;i<pts.length;i++){
+      const p=pts[i];
+      cx.beginPath();cx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      cx.fillStyle='rgba(167,139,250,'+(p.a*.75)+')';
+      cx.fill();
+      for(let j=i+1;j<pts.length;j++){
+        const q=pts[j];
+        const d=Math.hypot(p.x-q.x,p.y-q.y);
+        if(d<85){
+          cx.beginPath();cx.moveTo(p.x,p.y);cx.lineTo(q.x,q.y);
+          cx.strokeStyle='rgba(99,102,241,'+(0.2*(1-d/85))+')';
+          cx.lineWidth=.4;cx.stroke();
+        }
+      }
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.x<0||p.x>W) p.vx*=-1;
+      if(p.y<0||p.y>H) p.vy*=-1;
+    }
+    requestAnimationFrame(draw);
+  }
+
+  resize(); initPts(); draw();
+  window.addEventListener('resize',function(){resize();initPts();});
+})();
+</script>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<!-- Dashboard Logic -->
+<script>
+const DEFAULTS=[
+  {n:'Ananya',m:88},{n:'Rahul',m:74},{n:'Priya',m:92},
+  {n:'Arjun',m:65},{n:'Sneha',m:80}
+];
+const COLORS=['#6366f1','#8b5cf6','#a78bfa','#34d399','#f87171'];
+
+/* Build input rows */
+const inputWrap=document.getElementById('inputs');
+for(let i=0;i<5;i++){
+  const row=document.createElement('div');
+  row.className='srow';
+  row.innerHTML=
+    '<div class="field">'+
+      '<label>Student '+(i+1)+' name</label>'+
+      '<input type="text" id="n'+i+'" placeholder="'+DEFAULTS[i].n+'" value="'+DEFAULTS[i].n+'"/>'+
+    '</div>'+
+    '<div class="field">'+
+      '<label>Marks /100</label>'+
+      '<input type="number" id="m'+i+'" min="0" max="100" step="0.5" value="'+DEFAULTS[i].m+'"/>'+
+    '</div>';
+  inputWrap.appendChild(row);
+}
+
+let chart=null;
+
+function badge(mark,hi,lo){
+  if(mark===hi) return '<span class="badge b-top">Top scorer</span>';
+  if(mark===lo) return '<span class="badge b-low">Needs improvement</span>';
+  return '<span class="badge b-avg">Average</span>';
+}
+
+function analyse(){
+  const students=[];
+  for(let i=0;i<5;i++){
+    const name=(document.getElementById('n'+i).value.trim())||('Student '+(i+1));
+    const raw=document.getElementById('m'+i).value;
+    if(raw==='') continue;
+    const mark=parseFloat(raw);
+    if(isNaN(mark)||mark<0||mark>100){
+      document.getElementById('results').innerHTML=
+        '<p class="empty-hint" style="color:#f87171">Marks must be 0 – 100 for all students.</p>';
+      return;
+    }
+    students.push({name:name,mark:mark});
+  }
+  if(students.length<2){
+    document.getElementById('results').innerHTML=
+      '<p class="empty-hint" style="color:#f87171">Please fill in at least 2 students.</p>';
+    return;
+  }
+
+  const marks=students.map(function(s){return s.mark;});
+  const avg=Math.round((marks.reduce(function(a,b){return a+b;},0)/marks.length)*100)/100;
+  const hi=Math.max.apply(null,marks);
+  const lo=Math.min.apply(null,marks);
+  const hiN=students.find(function(s){return s.mark===hi;}).name;
+  const loN=students.find(function(s){return s.mark===lo;}).name;
+
+  document.getElementById('m-avg').textContent=avg.toFixed(1);
+  document.getElementById('m-hi').textContent=hi;
+  document.getElementById('m-hi-n').textContent=hiN;
+  document.getElementById('m-lo').textContent=lo;
+  document.getElementById('m-lo-n').textContent=loN;
+
+  let rows='<table class="rtable"><thead><tr><th>#</th><th>Student</th><th>Marks</th><th>Status</th></tr></thead><tbody>';
+  students.forEach(function(s,i){
+    rows+='<tr>'+
+      '<td style="color:#475569">'+(i+1)+'</td>'+
+      '<td style="color:#e2e8f0;font-weight:500">'+s.name+'</td>'+
+      '<td style="font-variant-numeric:tabular-nums;color:#e2e8f0;font-weight:600">'+s.mark+'</td>'+
+      '<td>'+badge(s.mark,hi,lo)+'</td>'+
+    '</tr>';
+  });
+  document.getElementById('results').innerHTML=rows+'</tbody></table>';
+
+  const cv=document.getElementById('pc');
+  cv.setAttribute('aria-label','Bar chart: '+students.map(function(s){return s.name+' '+s.mark;}).join(', '));
+  if(chart) chart.destroy();
+  chart=new Chart(cv,{
+    type:'bar',
+    data:{
+      labels:students.map(function(s){return s.name;}),
+      datasets:[{
+        label:'Marks',
+        data:marks,
+        backgroundColor:students.map(function(_,i){return COLORS[i%COLORS.length];}),
+        borderRadius:6,
+        borderSkipped:false
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          callbacks:{label:function(c){return c.parsed.y+'/100';}},
+          backgroundColor:'rgba(10,16,35,.95)',
+          titleColor:'#a78bfa',
+          bodyColor:'#e2e8f0',
+          borderColor:'rgba(99,102,241,.35)',
+          borderWidth:.5
+        }
+      },
+      scales:{
+        y:{
+          min:0,max:100,
+          grid:{color:'rgba(99,102,241,.1)'},
+          ticks:{color:'#475569',font:{size:11}}
+        },
+        x:{
+          grid:{display:false},
+          ticks:{color:'#94a3b8',font:{size:12},autoSkip:false}
+        }
+      }
+    }
+  });
+}
+
+analyse();
+</script>
+</body>
+</html>
